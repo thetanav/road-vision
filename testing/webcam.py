@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 from ultralytics import YOLO
 
-model = YOLO("../yolov5/yolov8n.pt")
+model = YOLO("../model.pt")
 
 # Real-time processing with overlay info
 cap = cv2.VideoCapture("./videos/dashcam2.mp4")  # or video file
@@ -143,7 +143,10 @@ while True:
     lanes, roi_points = detect_lane_lines(frame)
     final_frame = draw_lane_lines(annotated_frame, lanes)
 
-    cv2.imshow("Smart Dashcam - Objects + Lanes", final_frame)
+    # Resize the frame to make the window small
+    resized_frame = cv2.resize(final_frame, (640, 360))
+
+    cv2.imshow("Smart Dashcam - Objects + Lanes", resized_frame)
 
     # Check if window was closed
     if (
