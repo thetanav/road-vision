@@ -8,9 +8,84 @@ model = YOLO("../yolov5/yolov8n.pt")
 cap = cv2.VideoCapture("./videos/dashcam2.mp4")  # or video file
 
 
-def lane_detection_pipeline(frame):
-    # here use the lane_finding_pipeline function for lane detection
-    pass
+def detect_lane_lines(frame):
+    # Convert to grayscale
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+    # Apply Gaussian blur to reduce noise
+    blur = cv2.GaussianBlur(gray, (5, 5), 0)
+
+    # Edge detection - tuned for lane markings
+    edges = cv2.Canny(blur, 50, 150)
+
+    # Create region of interest - trapezoid shape from bottom
+    height, width = frame.shape[:2]
+
+    # Define the region where lanes typically appear
+    region_points = np.array(
+        [
+            [0, height],  # Bottom left
+            [width // 2 - 60, height * 0.6],  # Top left (adjust 0.6 for how far up)
+            [width // 2 + 60, height * 0.6],  # Top right
+            [width, height],  # Bottom right
+        ],
+        np.int32,
+    )
+
+    # Create mask
+    mask = np.zeros_like(edges)
+    cv2.fillPoly(mask, [region_points], 255)
+    masked_edges = cv2.bitwise_and(edges, mask)
+
+    # Detect lines using Hough transform
+    lines = cv2.HoughLinesP(
+        masked_edges,
+        rho=2,  # Distance resolution
+        theta=np.pi / 180,  # Angle resolution
+        threshold=50,  # Min votes
+        minLineLength=40,  # Min line length
+        maxLineGap=100,  # Max gap between line segments
+    )
+
+    return lines, region_points
+
+
+def draw_lane_lines(frame, lines):
+    if lines is not None:
+        # Separate left and right lanes
+        left_lines = []
+        right_lines = []
+
+        for line in lines:
+            x1, y1, x2, y2 = line[0]
+
+            # Calculate slope
+            if x2 - x1 == 0:  # Avoid division by zero
+                continue
+            slope = (y2 - y1) / (x2 - x1)
+
+            # Filter by slope to separate left/right lanes
+            if slope < -0.5:  # Left lane (negative slope)
+                left_lines.append(line[0])
+            elif slope > 0.5:  # Right lane (positive slope)
+                right_lines.append(line[0])
+
+        # Draw lanes
+        lane_frame = frame.copy()
+
+        # Draw left lane (blue)
+        for line in left_lines:
+            x1, y1, x2, y2 = line
+            cv2.line(lane_frame, (x1, y1), (x2, y2), (255, 0, 0), 5)
+
+        # Draw right lane (red)
+        for line in right_lines:
+            x1, y1, x2, y2 = line
+            cv2.line(lane_frame, (x1, y1), (x2, y2), (0, 0, 255), 5)
+
+        return lane_frame
+
+    return frame
 
 
 while True:
@@ -43,26 +118,30 @@ while True:
             2,
         )
 
-    threshold = 0.0005  # Object too close
+    threshold = 100  # Object too close
     # Alert for close objects
     for box in results[0].boxes:
-        # If bounding box is large (object is close)
-        box_area = (box.xyxy[0][2] - box.xyxy[0][0]) * (box.xyxy[0][3] - box.xyxy[0][1])
-        if box_area > threshold:  # Object too close
-            cv2.putText(
-                frame,
-                "WARNING: CLOSE OBJECT!",
-                (50, 100),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                1,
-                (0, 0, 255),
-                3,
+        class_id = int(box.cls[0])
+        class_name = model.names[class_id]
+        # Only warn if the object is a person and is too close
+        if class_name == "person":
+            box_area = (box.xyxy[0][2] - box.xyxy[0][0]) * (
+                box.xyxy[0][3] - box.xyxy[0][1]
             )
+            if box_area > threshold:
+                cv2.putText(
+                    annotated_frame,
+                    "WARNING: CLOSE PERSON!",
+                    (50, 100),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    1,
+                    (0, 0, 255),
+                    3,
+                )
 
-    # lane_lines = lane_finding_pipeline(frame)
-    lane_lines = lane_detection_pipeline(frame)
-    # Overlay lane lines on the annotated frame
-    final_frame = cv2.addWeighted(annotated_frame, 0.8, lane_lines, 1, 0)
+    # 2. Lane detection
+    lanes, roi_points = detect_lane_lines(frame)
+    final_frame = draw_lane_lines(annotated_frame, lanes)
 
     cv2.imshow("Smart Dashcam - Objects + Lanes", final_frame)
 
