@@ -8,45 +8,9 @@ model = YOLO("../yolov5/yolov8n.pt")
 cap = cv2.VideoCapture("./videos/dashcam2.mp4")  # or video file
 
 
-# --- Lane detection pipeline ---
 def lane_detection_pipeline(frame):
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    blur = cv2.GaussianBlur(gray, (5, 5), 0)
-    edges = cv2.Canny(blur, 50, 150)
-    height, width = edges.shape
-    mask = np.zeros_like(edges)
-    # Define region of interest: middle of the frame, above a certain distance from the bottom (e.g., 80 pixels)
-    bottom_offset = 80  # pixels from the bottom to avoid the car's bonnet
-    polygon = np.array(
-        [
-            [
-                (int(0.35 * width), height - bottom_offset),
-                (int(0.35 * width), int(0.6 * height)),
-                (int(0.65 * width), int(0.6 * height)),
-                (int(0.65 * width), height - bottom_offset),
-            ]
-        ],
-        np.int32,
-    )
-    cv2.fillPoly(mask, polygon, 255)
-    masked_edges = cv2.bitwise_and(edges, mask)
-    lines = cv2.HoughLinesP(
-        masked_edges, 1, np.pi / 180, threshold=50, minLineLength=100, maxLineGap=50
-    )
-    line_image = np.zeros_like(frame)
-    if lines is not None:
-        filtered_lines = []
-        for line in lines:
-            x1, y1, x2, y2 = line[0]
-            # Calculate angle in degrees
-            angle = np.degrees(np.arctan2(y2 - y1, x2 - x1))
-            # Keep only lines that are vertical or slanted (not horizontal)
-            if 20 < abs(angle) < 160:  # Exclude near-horizontal lines
-                filtered_lines.append((x1, y1, x2, y2))
-        # Limit the number of lines drawn (e.g., max 8)
-        for x1, y1, x2, y2 in filtered_lines[:8]:
-            cv2.line(line_image, (x1, y1), (x2, y2), (0, 255, 255), 8)
-    return line_image
+    # here use the lane_finding_pipeline function for lane detection
+    pass
 
 
 while True:
