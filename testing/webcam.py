@@ -145,6 +145,13 @@ while True:
 
     cv2.imshow("Smart Dashcam - Objects + Lanes", final_frame)
 
+    # Check if window was closed
+    if (
+        cv2.getWindowProperty("Smart Dashcam - Objects + Lanes", cv2.WND_PROP_VISIBLE)
+        < 1
+    ):
+        break
+
     if cv2.waitKey(1) & 0xFF == ord("q"):
         break
 
