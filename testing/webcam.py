@@ -7,7 +7,7 @@ model = YOLO("../model.pt")
 # Real-time processing with overlay info
 # Just put the video file here
 # OR the dsashcam ip
-cap = cv2.VideoCapture("./videos/dashcam.mp4")
+cap = cv2.VideoCapture("./videos/dashcam2.mp4")
 
 
 def detect_lane_lines(frame):
@@ -98,20 +98,41 @@ while True:
         class_id = int(box.cls[0])
         class_name = model.names[class_id]
         # Only warn if the object is a person and is too close
-        if class_name == "person":
-            box_area = (box.xyxy[0][2] - box.xyxy[0][0]) * (
-                box.xyxy[0][3] - box.xyxy[0][1]
+        box_area = (box.xyxy[0][2] - box.xyxy[0][0]) * (box.xyxy[0][3] - box.xyxy[0][1])
+
+        # Only warn if the object is in the center region of the frame (dashcam perspective)
+        frame_height, frame_width = frame.shape[:2]
+        # Define center region as the middle 1/3 of the frame width
+        center_left = int(frame_width * 1 / 3)
+        center_right = int(frame_width * 2 / 3)
+        # Get box coordinates
+        x1, y1, x2, y2 = map(int, box.xyxy[0])
+        box_center_x = (x1 + x2) // 2
+        # Only proceed with warning if the box center is in the center region
+        if not (center_left <= box_center_x <= center_right):
+            continue
+
+        if class_name == "car" and box_area > threshold * 6:
+            cv2.putText(
+                annotated_frame,
+                "WARNING: CLOSE CAR!",
+                (50, 100),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                1,
+                (0, 0, 255),
+                3,
             )
-            if box_area > threshold:
-                cv2.putText(
-                    annotated_frame,
-                    "WARNING: CLOSE PERSON!",
-                    (50, 100),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    1,
-                    (0, 0, 255),
-                    3,
-                )
+        elif class_name == "person" and box_area > threshold:
+            cv2.putText(
+                annotated_frame,
+                "WARNING: CLOSE PERSON!",
+                (50, 130),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                1,
+                (0, 0, 255),
+                3,
+            )
+            # fix car threshold, person
 
     # 2. Lane detection
     lanes, roi_points = detect_lane_lines(frame)
