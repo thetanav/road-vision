@@ -1,13 +1,13 @@
 import cv2
+import glob
+import time
 import numpy as np
 from ultralytics import YOLO
 
 model = YOLO("../model.pt")
 
 # Real-time processing with overlay info
-# Just put the video file here
-# OR the dsashcam ip
-cap = cv2.VideoCapture("./videos/dashcam.mp4")
+image_files = sorted(glob.glob("../car-camera-photos/images/images/*.jpg"))
 
 
 def detect_lane_lines(frame):
@@ -62,15 +62,13 @@ def draw_lane_lines(frame, lanes, color=(128, 0, 128), thickness=2):
     return final_frame
 
 
-while True:
-    ret, frame = cap.read()
-    if not ret:
-        break
+for image_file in image_files:
+    frame = cv2.imread(image_file)
+    if frame is None:
+        continue
 
     # Run detection
     results = model(frame, conf=0.4)
-
-    # Get annotated frame
     annotated_frame = results[0].plot()
 
     # Count detections
@@ -123,17 +121,9 @@ while True:
     cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
     cv2.imshow(window_name, final_frame)
 
-    # cv2.imshow("Smart Dashcam - Objects + Lanes", resized_frame)
-
-    # Check if window was closed
-    if (
-        cv2.getWindowProperty("Smart Dashcam - Objects + Lanes", cv2.WND_PROP_VISIBLE)
-        < 1
-    ):
-        break
+    time.sleep(0.2)
 
     if cv2.waitKey(1) & 0xFF == ord("q"):
         break
 
-cap.release()
 cv2.destroyAllWindows()
