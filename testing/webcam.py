@@ -5,87 +5,59 @@ from ultralytics import YOLO
 model = YOLO("../model.pt")
 
 # Real-time processing with overlay info
-cap = cv2.VideoCapture("./videos/dashcam2.mp4")  # or video file
+cap = cv2.VideoCapture("./videos/dashcam.mp4")  # or video file
 
 
 def detect_lane_lines(frame):
-    # Convert to grayscale
+    # Convert to grayscale and blur
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-
-    # Apply Gaussian blur to reduce noise
     blur = cv2.GaussianBlur(gray, (5, 5), 0)
 
-    # Edge detection - tuned for lane markings
+    # Edge detection
     edges = cv2.Canny(blur, 50, 150)
 
-    # Create region of interest - trapezoid shape from bottom
-    height, width = frame.shape[:2]
-
-    # Define the region where lanes typically appear
-    region_points = np.array(
+    # Define Region of Interest
+    height, width = edges.shape
+    roi_points = np.array(
         [
-            [0, height],  # Bottom left
-            [width // 2 - 60, height * 0.6],  # Top left (adjust 0.6 for how far up)
-            [width // 2 + 60, height * 0.6],  # Top right
-            [width, height],  # Bottom right
+            [
+                (int(0.1 * width), height),
+                (int(0.45 * width), int(0.6 * height)),
+                (int(0.55 * width), int(0.6 * height)),
+                (int(0.9 * width), height),
+            ]
         ],
-        np.int32,
+        dtype=np.int32,
     )
 
-    # Create mask
     mask = np.zeros_like(edges)
-    cv2.fillPoly(mask, [region_points], 255)
-    masked_edges = cv2.bitwise_and(edges, mask)
+    cv2.fillPoly(mask, roi_points, 255)
+    cropped_edges = cv2.bitwise_and(edges, mask)
 
-    # Detect lines using Hough transform
+    # Hough Transform to detect lines
     lines = cv2.HoughLinesP(
-        masked_edges,
-        rho=2,  # Distance resolution
-        theta=np.pi / 180,  # Angle resolution
-        threshold=50,  # Min votes
-        minLineLength=40,  # Min line length
-        maxLineGap=100,  # Max gap between line segments
+        cropped_edges,
+        rho=1,
+        theta=np.pi / 180,
+        threshold=50,
+        minLineLength=40,
+        maxLineGap=100,
     )
 
-    return lines, region_points
+    return lines, roi_points
 
 
-def draw_lane_lines(frame, lines):
-    if lines is not None:
-        # Separate left and right lanes
-        left_lines = []
-        right_lines = []
+def draw_lane_lines(frame, lanes, color=(0, 255, 0), thickness=5):
+    line_image = np.zeros_like(frame)
 
-        for line in lines:
+    if lanes is not None:
+        for line in lanes:
             x1, y1, x2, y2 = line[0]
+            cv2.line(line_image, (x1, y1), (x2, y2), color, thickness)
 
-            # Calculate slope
-            if x2 - x1 == 0:  # Avoid division by zero
-                continue
-            slope = (y2 - y1) / (x2 - x1)
-
-            # Filter by slope to separate left/right lanes
-            if slope < -0.5:  # Left lane (negative slope)
-                left_lines.append(line[0])
-            elif slope > 0.5:  # Right lane (positive slope)
-                right_lines.append(line[0])
-
-        # Draw lanes
-        lane_frame = frame.copy()
-
-        # Draw left lane (blue)
-        for line in left_lines:
-            x1, y1, x2, y2 = line
-            cv2.line(lane_frame, (x1, y1), (x2, y2), (255, 0, 0), 5)
-
-        # Draw right lane (red)
-        for line in right_lines:
-            x1, y1, x2, y2 = line
-            cv2.line(lane_frame, (x1, y1), (x2, y2), (0, 0, 255), 5)
-
-        return lane_frame
-
-    return frame
+    # Overlay lane lines on original frame
+    final_frame = cv2.addWeighted(frame, 0.8, line_image, 1, 1)
+    return final_frame
 
 
 while True:
@@ -118,7 +90,7 @@ while True:
             2,
         )
 
-    threshold = 100  # Object too close
+    threshold = 200  # Object too close
     # Alert for close objects
     for box in results[0].boxes:
         class_id = int(box.cls[0])
@@ -144,9 +116,12 @@ while True:
     final_frame = draw_lane_lines(annotated_frame, lanes)
 
     # Resize the frame to make the window small
-    resized_frame = cv2.resize(final_frame, (640, 360))
+    # Show the frame as-is, allow window to be resizable
+    window_name = "Smart Dashcam - Objects + Lanes"
+    cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+    cv2.imshow(window_name, final_frame)
 
-    cv2.imshow("Smart Dashcam - Objects + Lanes", resized_frame)
+    # cv2.imshow("Smart Dashcam - Objects + Lanes", resized_frame)
 
     # Check if window was closed
     if (
