@@ -1,6 +1,9 @@
 import cv2
 import numpy as np
 from ultralytics import YOLO
+from playsound import playsound
+import threading
+import time
 
 model = YOLO("../model.pt")
 
@@ -8,6 +11,14 @@ model = YOLO("../model.pt")
 # Just put the video file here
 # OR the dsashcam ip
 cap = cv2.VideoCapture("./videos/dashcam2.mp4")
+# cap = cv2.VideoCapture(0)
+
+last_beep_time = 0  # Track last beep time
+
+
+def beep():
+    playsound("../sounds/tesla_warning_chime.mp3")
+    time.sleep(0.5)
 
 
 def detect_lane_lines(frame):
@@ -68,7 +79,7 @@ while True:
         break
 
     # Run detection
-    results = model(frame, conf=0.4)
+    results = model(frame, conf=0.5)
 
     # Get annotated frame
     annotated_frame = results[0].plot()
@@ -93,7 +104,7 @@ while True:
         )
 
     threshold = 200  # Object too close
-    # Alert for close objects
+
     for box in results[0].boxes:
         class_id = int(box.cls[0])
         class_name = model.names[class_id]
@@ -108,31 +119,61 @@ while True:
         # Get box coordinates
         x1, y1, x2, y2 = map(int, box.xyxy[0])
         box_center_x = (x1 + x2) // 2
+
         # Only proceed with warning if the box center is in the center region
         if not (center_left <= box_center_x <= center_right):
             continue
 
-        if class_name == "car" and box_area > threshold * 6:
-            cv2.putText(
-                annotated_frame,
-                "WARNING: CLOSE CAR!",
-                (50, 100),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                1,
-                (0, 0, 255),
-                3,
-            )
+        now = time.time()
+
+        if class_name == "car":
+            if box_area < threshold * 8:
+                cv2.putText(
+                    annotated_frame,
+                    "CAR CLOSE!",
+                    (50, 100),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    1,
+                    (0, 255, 255),
+                    3,
+                )
+            elif box_area > threshold * 8:
+                cv2.putText(
+                    annotated_frame,
+                    "CAR TOO CLOSE!",
+                    (50, 100),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    1,
+                    (0, 0, 255),
+                    3,
+                )
+                if now - last_beep_time > 1:
+                    threading.Thread(target=beep, daemon=True).start()
+                    last_beep_time = now
         elif class_name == "person" and box_area > threshold:
-            cv2.putText(
-                annotated_frame,
-                "WARNING: CLOSE PERSON!",
-                (50, 130),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                1,
-                (0, 0, 255),
-                3,
-            )
-            # fix car threshold, person
+            if box_area < threshold * 3:
+                cv2.putText(
+                    annotated_frame,
+                    "PERSON CLOSE!",
+                    (50, 130),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    1,
+                    (0, 255, 255),
+                    3,
+                )
+            elif box_area > threshold * 3:
+                cv2.putText(
+                    annotated_frame,
+                    "PERSON TOO CLOSE!",
+                    (50, 130),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    1,
+                    (0, 0, 255),
+                    3,
+                )
+                if now - last_beep_time > 1:
+                    threading.Thread(target=beep, daemon=True).start()
+                    last_beep_time = now
 
     # 2. Lane detection
     lanes, roi_points = detect_lane_lines(frame)
