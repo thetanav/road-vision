@@ -1,13 +1,14 @@
 import cv2
+import time
+import threading
 import numpy as np
 from ultralytics import YOLO
-import threading
+from lane import detect_lanes
 from playsound import playsound
-import time
 
 model = YOLO("../model.pt")
 
-cap = cv2.VideoCapture("./videos/dashcam2.mp4")
+cap = cv2.VideoCapture("./videos/dashcam3.mp4")
 
 last_beep_time = 0
 
@@ -20,37 +21,6 @@ def get_color(class_id):
     np.random.seed(class_id)
     color = np.random.randint(0, 255, 3)
     return tuple(int(c) for c in color)
-
-
-def detect_lanes(frame):
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    blur = cv2.GaussianBlur(gray, (5, 5), 0)
-    edges = cv2.Canny(blur, 50, 150)
-    height, width = edges.shape
-    mask = np.zeros_like(edges)
-    # Focus on the lower half of the frame
-    polygon = np.array(
-        [
-            [
-                (int(0.1 * width), height),
-                (int(0.45 * width), int(0.6 * height)),
-                (int(0.55 * width), int(0.6 * height)),
-                (int(0.9 * width), height),
-            ]
-        ],
-        np.int32,
-    )
-    cv2.fillPoly(mask, polygon, 255)
-    masked_edges = cv2.bitwise_and(edges, mask)
-    lines = cv2.HoughLinesP(
-        masked_edges, 1, np.pi / 180, threshold=50, minLineLength=50, maxLineGap=150
-    )
-    line_img = np.zeros_like(frame)
-    if lines is not None:
-        for line in lines:
-            x1, y1, x2, y2 = line[0]
-            cv2.line(line_img, (x1, y1), (x2, y2), (0, 255, 0), 5)
-    return cv2.addWeighted(frame, 0.8, line_img, 1, 1)
 
 
 while True:
@@ -81,7 +51,6 @@ while True:
 
             now = time.time()
 
-            cv2.rectangle(annotated_frame, (0, 0), (340, 120), (255, 255, 255), -1)
             if (
                 class_name == "car"
                 and box_area > threshold * 10
@@ -97,6 +66,9 @@ while True:
                     (0, 0, 255),
                     3,
                 )
+                if time.time() - last_beep_time > 1:
+                    threading.Thread(target=beep, daemon=True).start()
+                    last_beep_time = time.time()
             elif class_name == "person" and box_area > threshold * 3:
                 cv2.putText(
                     annotated_frame,
