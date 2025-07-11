@@ -8,7 +8,7 @@ from playsound import playsound
 
 model = YOLO("../model.pt")
 
-cap = cv2.VideoCapture("./videos/dashcam3.mp4")
+cap = cv2.VideoCapture("./videos/lane1.mp4")
 
 last_beep_time = 0
 
